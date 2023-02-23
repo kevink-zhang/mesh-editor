@@ -23,7 +23,11 @@ private slots:
 
     void on_actionCamera_Controls_triggered();
 
-    //void on_actionLoad_Scene_triggered();
+    void slot_addFaceToListWidget(QListWidgetItem *i);
+
+    void slot_addVertexToListWidget(QListWidgetItem *i);
+
+    void slot_addEdgeToListWidget(QListWidgetItem *i);
 private:
     Ui::MainWindow *ui;
 };

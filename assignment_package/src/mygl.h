@@ -11,6 +11,41 @@
 #include <QOpenGLVertexArrayObject>
 #include <QOpenGLShaderProgram>
 
+class VertexDisplay : public Drawable {
+public:
+    Vertex *representedVertex;
+    // Creates VBO data to make a visual
+    // representation of the currently selected Vertex
+    VertexDisplay(OpenGLContext *mp_context);
+    virtual void create();
+    virtual GLenum drawMode();
+    // Change which Vertex representedVertex points to
+
+};
+
+class EdgeDisplay : public Drawable {
+public:
+    HalfEdge *representedEdge;
+    // Creates VBO data to make a visual
+    // representation of the currently selected Vertex
+    EdgeDisplay(OpenGLContext *mp_context);
+    virtual void create();
+    virtual GLenum drawMode();
+    // Change which Vertex representedVertex points to
+
+};
+
+class FaceDisplay : public Drawable {
+public:
+    Face *representedFace;
+    // Creates VBO data to make a visual
+    // representation of the currently selected Vertex
+    FaceDisplay(OpenGLContext *mp_context);
+    virtual void create();
+    virtual GLenum drawMode();
+    // Change which Vertex representedVertex points to
+
+};
 
 class MyGL
     : public OpenGLContext
@@ -26,8 +61,6 @@ private:
                 // Don't worry too much about this. Just know it is necessary in order to render geometry.
 
     Camera m_glCamera;
-
-
 public:
     explicit MyGL(QWidget *parent = nullptr);
     ~MyGL();
@@ -36,8 +69,16 @@ public:
     void resizeGL(int w, int h);
     void paintGL();
 
+    VertexDisplay m_vertDisplay;
+    EdgeDisplay m_edgeDisplay;
+    FaceDisplay m_faceDisplay;
+
 protected:
     void keyPressEvent(QKeyEvent *e);
+signals:
+    void sig_sendFaceListNode(QListWidgetItem*);
+    void sig_sendVertexListNode(QListWidgetItem*);
+    void sig_sendEdgeListNode(QListWidgetItem*);
 public slots:
     void slot_loadobj();
 };

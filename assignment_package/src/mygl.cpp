@@ -1,6 +1,10 @@
 #include "mygl.h"
 #include <la.h>
 #include "tiny_obj_loader.h"
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <sstream>
 
 #include <iostream>
 #include <QApplication>
@@ -17,13 +21,63 @@
 #include <QImageWriter>
 #include <QDebug>
 
+VertexDisplay::VertexDisplay(OpenGLContext *mp_context) : Drawable(mp_context) {
+
+}
+EdgeDisplay::EdgeDisplay(OpenGLContext *mp_context) : Drawable(mp_context) {
+
+}
+FaceDisplay::FaceDisplay(OpenGLContext *mp_context) : Drawable(mp_context) {
+
+}
+GLenum VertexDisplay::drawMode() {
+    return GL_POINTS;
+}
+GLenum EdgeDisplay::drawMode() {
+    return GL_LINES;
+}
+GLenum FaceDisplay::drawMode() {
+    return GL_LINES;
+}
+void VertexDisplay::create() {
+    std::vector<glm::vec4> pos = {glm::vec4(representedVertex -> pos, 1)};
+
+    std::vector<glm::vec4> col = {glm::vec4(1)};
+
+    std::vector<GLuint> idx = {0};
+
+    count = 1;
+
+    generateIdx();
+    mp_context->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bufIdx);
+    mp_context->glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx.size() * sizeof(GLuint), idx.data(), GL_STATIC_DRAW);
+
+    generatePos();
+    mp_context->glBindBuffer(GL_ARRAY_BUFFER, bufPos);
+    mp_context->glBufferData(GL_ARRAY_BUFFER, pos.size() * sizeof(glm::vec4), pos.data(), GL_STATIC_DRAW);
+
+    generateCol();
+    mp_context->glBindBuffer(GL_ARRAY_BUFFER, bufCol);
+    mp_context->glBufferData(GL_ARRAY_BUFFER, col.size() * sizeof(glm::vec4), col.data(), GL_STATIC_DRAW);
+}
+void EdgeDisplay::create() {
+
+}
+void FaceDisplay::create() {
+
+}
+
+
 
 MyGL::MyGL(QWidget *parent)
     : OpenGLContext(parent),
       m_geomSquare(this),
       m_mesh(this),
       m_progLambert(this), m_progFlat(this),
-      m_glCamera()
+      m_glCamera(),
+      m_vertDisplay(this),
+      m_faceDisplay(this),
+      m_edgeDisplay(this)
 {
     setFocusPolicy(Qt::StrongFocus);
 }
@@ -33,6 +87,10 @@ MyGL::~MyGL()
     makeCurrent();
     glDeleteVertexArrays(1, &vao);
     m_geomSquare.destroy();
+    m_mesh.destroy();
+    m_vertDisplay.destroy();
+    m_faceDisplay.destroy();
+    m_edgeDisplay.destroy();
 }
 
 void MyGL::initializeGL()
@@ -61,6 +119,7 @@ void MyGL::initializeGL()
 
     //Create the instances of Cylinder and Sphere.
     //m_geomSquare.create();
+    m_mesh.create();
 
     // Create and set up the diffuse shader
     m_progLambert.create(":/glsl/lambert.vert.glsl", ":/glsl/lambert.frag.glsl");
@@ -117,7 +176,7 @@ void MyGL::paintGL()
 //    m_progLambert.draw(m_geomSquare);
 
     //draw the mesh
-    //m_progLambert.draw(m_mesh);
+    m_progFlat.draw(m_mesh);
 }
 
 
@@ -178,114 +237,46 @@ void MyGL::slot_loadobj() {
         return;
     }
 
-    std::vector<tinyobj::shape_t> shapes; std::vector<tinyobj::material_t> materials;
-    std::string errors = tinyobj::LoadObj(shapes, materials, filename.toStdString().c_str());
-    std::cout << errors << std::endl;
-    if(errors.size() == 0)
-    {
-        //make sure the obj data stored in mesh is cleared
-        m_mesh.clear();
+    QStringList line;
+    QTextStream stream(&file);
 
-        //Read the information from the vector of shape_ts
-        for(unsigned int i = 0; i < shapes.size(); i++)
-        {
-            std::vector<float> &positions = shapes[i].mesh.positions;
-            std::vector<float> &normals = shapes[i].mesh.normals;
-            std::vector<float> &uvs = shapes[i].mesh.texcoords;
-            for(unsigned int j = 0; j < positions.size()/3; j++)
-            {
-                m_mesh.v.push_back(glm::vec4(positions[j*3], positions[j*3+1], positions[j*3+2],1));
-            }
-            for(unsigned int j = 0; j < normals.size()/3; j++)
-            {
-                m_mesh.vn.push_back(glm::vec4(normals[j*3], normals[j*3+1], normals[j*3+2],0));
-            }
-            for(unsigned int j = 0; j < uvs.size()/2; j++)
-            {
-                m_mesh.vt.push_back(glm::vec2(uvs[j*2], uvs[j*2+1]));
-            }
+    m_mesh.clear();
+
+    while (!stream.atEnd()){
+        line = stream.readLine().split(' ');
+        //empty line
+        if(line.length() == 0) continue;
+        //vertex
+        if(line[0] == "v") {
+            m_mesh.v.push_back(glm::vec4(line[1].toFloat(), line[2].toFloat(), line[3].toFloat(), 1.0));
         }
-        qDebug() << m_mesh.v.size() << m_mesh.vn.size() << m_mesh.vt.size();
-        //create the mesh
-        m_mesh.create();
-        m_mesh.clear();
-    }
-    else
-    {
-        //An error loading the OBJ occurred!
-        std::cout << errors << std::endl;
+        else if(line[0] == "vt") {
+            m_mesh.vt.push_back(glm::vec2(line[1].toFloat(), line[2].toFloat()));
+        }
+        else if(line[0] == "vn") {
+            m_mesh.vn.push_back(glm::vec4(line[1].toFloat(), line[2].toFloat(), line[3].toFloat(), 1.0));
+        }
+        else if(line[0] == "f") {
+            std::vector<glm::vec3> someface;
+            for(int i = 1; i < line.length(); i++) {
+                QStringList faceinfo = line[i].split('/');
+                someface.push_back(glm::vec3(faceinfo[0].toInt(), faceinfo[1].toInt(), faceinfo[2].toInt()));
+            }
+            m_mesh.f.push_back(someface);
+        }
     }
 
-    //Read the mesh data in the file
-//    for(int i = 0; i < objects.size(); i++)
-//    {
-//        std::vector<glm::vec4> vert_pos;
-//        std::vector<glm::vec3> vert_col;
-//        QJsonObject obj = objects[i].toObject();
-//        QString type = obj["type"].toString();
-//        qDebug() << type;
-//        //Custom Polygon case
-//        if(QString::compare(type, QString("custom")) == 0)
-//        {
-//            QString name = obj["name"].toString();
-//            QJsonArray pos = obj["vertexPos"].toArray();
-//            for(int j = 0; j < pos.size(); j++)
-//            {
-//                QJsonArray arr = pos[j].toArray();
-//                glm::vec4 p(arr[0].toDouble(), arr[1].toDouble(), arr[2].toDouble(), 1);
-//                vert_pos.push_back(p);
-//            }
-//            QJsonArray col = obj["vertexCol"].toArray();
-//            for(int j = 0; j < col.size(); j++)
-//            {
-//                QJsonArray arr = col[j].toArray();
-//                glm::vec3 c(arr[0].toDouble(), arr[1].toDouble(), arr[2].toDouble());
-//                vert_col.push_back(c);
-//            }
-//            Polygon p(name, vert_pos, vert_col);
-//            polygons.push_back(p);
-//        }
-//        //Regular Polygon case
-//        else if(QString::compare(type, QString("regular")) == 0)
-//        {
-//            QString name = obj["name"].toString();
-//            int sides = obj["sides"].toInt();
-//            QJsonArray colorA = obj["color"].toArray();
-//            glm::vec3 color(colorA[0].toDouble(), colorA[1].toDouble(), colorA[2].toDouble());
-//            QJsonArray posA = obj["pos"].toArray();
-//            glm::vec4 pos(posA[0].toDouble(), posA[1].toDouble(), posA[2].toDouble(),1);
-//            float rot = obj["rot"].toDouble();
-//            QJsonArray scaleA = obj["scale"].toArray();
-//            glm::vec4 scale(scaleA[0].toDouble(), scaleA[1].toDouble(), scaleA[2].toDouble(),1);
-//            Polygon p(name, sides, color, pos, rot, scale);
-//            polygons.push_back(p);
-//        }
-//        //OBJ file case
-//        else if(QString::compare(type, QString("obj")) == 0)
-//        {
-//            QString name = obj["name"].toString();
-//            QString filename = local_path;
-//            filename.append(obj["filename"].toString());
-//            Polygon p = LoadOBJ(filename, name);
-//            QString texPath = local_path;
-//            texPath.append(obj["texture"].toString());
-//            p.SetTexture(new QImage(texPath));
-//            if(obj.contains(QString("normalMap")))
-//            {
-//                p.SetNormalMap(new QImage(local_path.append(obj["normalMap"].toString())));
-//            }
-//            polygons.push_back(p);
-//        }
-//    }
+    m_mesh.create();
+
+    for(int i = 0; i < m_mesh.faces.size(); i++) {
+        emit sig_sendFaceListNode(m_mesh.faces[i].get());
+    }
+
+    for(int i = 0; i < m_mesh.vertices.size(); i++) {
+        emit sig_sendVertexListNode(m_mesh.vertices[i].get());
+    }
+
+    for(int i = 0; i < m_mesh.halfedges.size(); i++) {
+        emit sig_sendEdgeListNode(m_mesh.halfedges[i].get());
+    }
 }
-
-//obj loading
-//Mesh MainWindow::LoadOBJ(const QString &file, const QString &polyName)
-//{
-//    Polygon p(polyName);
-//    QString filepath = file;
-
-//    return p;
-    //return Mesh(mp_context);
-//}
-
