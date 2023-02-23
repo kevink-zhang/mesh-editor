@@ -1,5 +1,5 @@
 #include "mainwindow.h"
-#include <ui_mainwindow.h>
+#include "ui_mainwindow.h"
 #include "cameracontrolshelp.h"
 
 
@@ -9,6 +9,10 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     ui->setupUi(this);
     ui->mygl->setFocus();
+
+    //connect the load obj to button
+    connect(ui->loadOBJButton, SIGNAL(clicked()),
+            ui->mygl, SLOT(slot_loadobj()));
 }
 
 MainWindow::~MainWindow()
@@ -26,3 +30,5 @@ void MainWindow::on_actionCamera_Controls_triggered()
     CameraControlsHelp* c = new CameraControlsHelp();
     c->show();
 }
+
+

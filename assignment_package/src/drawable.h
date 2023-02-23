@@ -14,11 +14,15 @@ protected:
     GLuint bufNor; // A Vertex Buffer Object that we will use to store mesh normals (vec4s)
     GLuint bufCol; // Can be used to pass per-vertex color information to the shader, but is currently unused.
                    // Instead, we use a uniform vec4 in the shader to set an overall color for the geometry
+    GLuint bufUV; // Can be used to pass per-vertex UV information to the shader
+
 
     bool idxBound; // Set to TRUE by generateIdx(), returned by bindIdx().
     bool posBound;
     bool norBound;
     bool colBound;
+    bool uvBound;
+
 
     OpenGLContext* mp_context; // Since Qt's OpenGL support is done through classes like QOpenGLFunctions_3_2_Core,
                           // we need to pass our OpenGL context to the Drawable in order to call GL functions
@@ -42,9 +46,13 @@ public:
     void generatePos();
     void generateNor();
     void generateCol();
+    void generateUV();
+
 
     bool bindIdx();
     bool bindPos();
     bool bindNor();
     bool bindCol();
+    bool bindUV();
+
 };

@@ -1,14 +1,27 @@
 #include "mygl.h"
 #include <la.h>
+#include "tiny_obj_loader.h"
 
 #include <iostream>
 #include <QApplication>
 #include <QKeyEvent>
+#include <QPixmap>
+#include <QFileDialog>
+#include <QTextStream>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <iostream>
+#include <QApplication>
+#include <QKeyEvent>
+#include <QImageWriter>
+#include <QDebug>
 
 
 MyGL::MyGL(QWidget *parent)
     : OpenGLContext(parent),
       m_geomSquare(this),
+      m_mesh(this),
       m_progLambert(this), m_progFlat(this),
       m_glCamera()
 {
@@ -47,7 +60,7 @@ void MyGL::initializeGL()
     glGenVertexArrays(1, &vao);
 
     //Create the instances of Cylinder and Sphere.
-    m_geomSquare.create();
+    //m_geomSquare.create();
 
     // Create and set up the diffuse shader
     m_progLambert.create(":/glsl/lambert.vert.glsl", ":/glsl/lambert.frag.glsl");
@@ -95,13 +108,16 @@ void MyGL::paintGL()
     //Send the geometry's transformation matrix to the shader
     m_progLambert.setModelMatrix(model);
     //Draw the example sphere using our lambert shader
-    m_progLambert.draw(m_geomSquare);
+//    m_progLambert.draw(m_geomSquare);
 
-    //Now do the same to render the cylinder
-    //We've rotated it -45 degrees on the Z axis, then translated it to the point <2,2,0>
-    model = glm::translate(glm::mat4(1.0f), glm::vec3(2,2,0)) * glm::rotate(glm::mat4(1.0f), glm::radians(-45.0f), glm::vec3(0,0,1));
-    m_progLambert.setModelMatrix(model);
-    m_progLambert.draw(m_geomSquare);
+//    //Now do the same to render the cylinder
+//    //We've rotated it -45 degrees on the Z axis, then translated it to the point <2,2,0>
+//    model = glm::translate(glm::mat4(1.0f), glm::vec3(2,2,0)) * glm::rotate(glm::mat4(1.0f), glm::radians(-45.0f), glm::vec3(0,0,1));
+//    m_progLambert.setModelMatrix(model);
+//    m_progLambert.draw(m_geomSquare);
+
+    //draw the mesh
+    //m_progLambert.draw(m_mesh);
 }
 
 
@@ -146,3 +162,130 @@ void MyGL::keyPressEvent(QKeyEvent *e)
     m_glCamera.RecomputeAttributes();
     update();  // Calls paintGL, among other things
 }
+
+void MyGL::slot_loadobj() {
+    QString filename = QFileDialog::getOpenFileName(0, QString("Load Scene File"), QDir::currentPath().append(QString("../..")), QString("*.obj"));
+    int i = filename.length() - 1;
+    while(QString::compare(filename.at(i), QChar('/')) != 0)
+    {
+        i--;
+    }
+    QString local_path = filename.left(i+1);
+
+    QFile file(filename);
+    if(!file.open(QIODevice::ReadOnly)){
+        qWarning("Could not open the OBJ file.");
+        return;
+    }
+
+    std::vector<tinyobj::shape_t> shapes; std::vector<tinyobj::material_t> materials;
+    std::string errors = tinyobj::LoadObj(shapes, materials, filename.toStdString().c_str());
+    std::cout << errors << std::endl;
+    if(errors.size() == 0)
+    {
+        //make sure the obj data stored in mesh is cleared
+        m_mesh.clear();
+
+        //Read the information from the vector of shape_ts
+        for(unsigned int i = 0; i < shapes.size(); i++)
+        {
+            std::vector<float> &positions = shapes[i].mesh.positions;
+            std::vector<float> &normals = shapes[i].mesh.normals;
+            std::vector<float> &uvs = shapes[i].mesh.texcoords;
+            for(unsigned int j = 0; j < positions.size()/3; j++)
+            {
+                m_mesh.v.push_back(glm::vec4(positions[j*3], positions[j*3+1], positions[j*3+2],1));
+            }
+            for(unsigned int j = 0; j < normals.size()/3; j++)
+            {
+                m_mesh.vn.push_back(glm::vec4(normals[j*3], normals[j*3+1], normals[j*3+2],0));
+            }
+            for(unsigned int j = 0; j < uvs.size()/2; j++)
+            {
+                m_mesh.vt.push_back(glm::vec2(uvs[j*2], uvs[j*2+1]));
+            }
+        }
+        qDebug() << m_mesh.v.size() << m_mesh.vn.size() << m_mesh.vt.size();
+        //create the mesh
+        m_mesh.create();
+        m_mesh.clear();
+    }
+    else
+    {
+        //An error loading the OBJ occurred!
+        std::cout << errors << std::endl;
+    }
+
+    //Read the mesh data in the file
+//    for(int i = 0; i < objects.size(); i++)
+//    {
+//        std::vector<glm::vec4> vert_pos;
+//        std::vector<glm::vec3> vert_col;
+//        QJsonObject obj = objects[i].toObject();
+//        QString type = obj["type"].toString();
+//        qDebug() << type;
+//        //Custom Polygon case
+//        if(QString::compare(type, QString("custom")) == 0)
+//        {
+//            QString name = obj["name"].toString();
+//            QJsonArray pos = obj["vertexPos"].toArray();
+//            for(int j = 0; j < pos.size(); j++)
+//            {
+//                QJsonArray arr = pos[j].toArray();
+//                glm::vec4 p(arr[0].toDouble(), arr[1].toDouble(), arr[2].toDouble(), 1);
+//                vert_pos.push_back(p);
+//            }
+//            QJsonArray col = obj["vertexCol"].toArray();
+//            for(int j = 0; j < col.size(); j++)
+//            {
+//                QJsonArray arr = col[j].toArray();
+//                glm::vec3 c(arr[0].toDouble(), arr[1].toDouble(), arr[2].toDouble());
+//                vert_col.push_back(c);
+//            }
+//            Polygon p(name, vert_pos, vert_col);
+//            polygons.push_back(p);
+//        }
+//        //Regular Polygon case
+//        else if(QString::compare(type, QString("regular")) == 0)
+//        {
+//            QString name = obj["name"].toString();
+//            int sides = obj["sides"].toInt();
+//            QJsonArray colorA = obj["color"].toArray();
+//            glm::vec3 color(colorA[0].toDouble(), colorA[1].toDouble(), colorA[2].toDouble());
+//            QJsonArray posA = obj["pos"].toArray();
+//            glm::vec4 pos(posA[0].toDouble(), posA[1].toDouble(), posA[2].toDouble(),1);
+//            float rot = obj["rot"].toDouble();
+//            QJsonArray scaleA = obj["scale"].toArray();
+//            glm::vec4 scale(scaleA[0].toDouble(), scaleA[1].toDouble(), scaleA[2].toDouble(),1);
+//            Polygon p(name, sides, color, pos, rot, scale);
+//            polygons.push_back(p);
+//        }
+//        //OBJ file case
+//        else if(QString::compare(type, QString("obj")) == 0)
+//        {
+//            QString name = obj["name"].toString();
+//            QString filename = local_path;
+//            filename.append(obj["filename"].toString());
+//            Polygon p = LoadOBJ(filename, name);
+//            QString texPath = local_path;
+//            texPath.append(obj["texture"].toString());
+//            p.SetTexture(new QImage(texPath));
+//            if(obj.contains(QString("normalMap")))
+//            {
+//                p.SetNormalMap(new QImage(local_path.append(obj["normalMap"].toString())));
+//            }
+//            polygons.push_back(p);
+//        }
+//    }
+}
+
+//obj loading
+//Mesh MainWindow::LoadOBJ(const QString &file, const QString &polyName)
+//{
+//    Polygon p(polyName);
+//    QString filepath = file;
+
+//    return p;
+    //return Mesh(mp_context);
+//}
+

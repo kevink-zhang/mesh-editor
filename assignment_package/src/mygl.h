@@ -5,6 +5,7 @@
 #include <utils.h>
 #include <shaderprogram.h>
 #include <scene/squareplane.h>
+#include <scene/mesh.h>
 #include "camera.h"
 
 #include <QOpenGLVertexArrayObject>
@@ -17,6 +18,7 @@ class MyGL
     Q_OBJECT
 private:
     SquarePlane m_geomSquare;// The instance of a unit cylinder we can use to render any cylinder
+    Mesh m_mesh;
     ShaderProgram m_progLambert;// A shader program that uses lambertian reflection
     ShaderProgram m_progFlat;// A shader program that uses "flat" reflection (no shadowing at all)
 
@@ -36,6 +38,8 @@ public:
 
 protected:
     void keyPressEvent(QKeyEvent *e);
+public slots:
+    void slot_loadobj();
 };
 
 

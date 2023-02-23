@@ -2,7 +2,8 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-
+#include "scene/mesh.h"
+#include <QGraphicsScene>
 
 namespace Ui {
 class MainWindow;
@@ -22,6 +23,7 @@ private slots:
 
     void on_actionCamera_Controls_triggered();
 
+    //void on_actionLoad_Scene_triggered();
 private:
     Ui::MainWindow *ui;
 };
