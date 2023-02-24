@@ -248,17 +248,8 @@ void MyGL::paintGL()
     //Note that we have to transpose the model matrix before passing it to the shader
     //This is because OpenGL expects column-major matrices, but you've
     //implemented row-major matrices.
-    glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(-2,0,0)) * glm::rotate(glm::mat4(), 0.25f * 3.14159f, glm::vec3(0,1,0));
     //Send the geometry's transformation matrix to the shader
-    m_progLambert.setModelMatrix(model);
-    //Draw the example sphere using our lambert shader
-//    m_progLambert.draw(m_geomSquare);
-
-//    //Now do the same to render the cylinder
-//    //We've rotated it -45 degrees on the Z axis, then translated it to the point <2,2,0>
-//    model = glm::translate(glm::mat4(1.0f), glm::vec3(2,2,0)) * glm::rotate(glm::mat4(1.0f), glm::radians(-45.0f), glm::vec3(0,0,1));
-//    m_progLambert.setModelMatrix(model);
-//    m_progLambert.draw(m_geomSquare);
+    m_progLambert.setModelMatrix(glm::mat4(1.f));
 
     //draw the mesh
 
@@ -365,14 +356,13 @@ void MyGL::slot_loadobj() {
     QTextStream stream(&file);
 
     m_mesh.clear();
-    m_mesh.destroy();
+
     m_vertDisplay.representedVertex = nullptr;
     m_edgeDisplay.representedEdge = nullptr;
     m_faceDisplay.representedFace = nullptr;
     m_vertDisplay.create();
     m_edgeDisplay.create();
     m_faceDisplay.create();
-    m_mesh = Mesh(this);
 
     std::vector<glm::vec4> v;
     std::vector<glm::vec2> vt;
