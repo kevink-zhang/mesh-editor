@@ -21,13 +21,13 @@
 #include <QImageWriter>
 #include <QDebug>
 
-VertexDisplay::VertexDisplay(OpenGLContext *mp_context) : Drawable(mp_context) {
+VertexDisplay::VertexDisplay(OpenGLContext *mp_context) : Drawable(mp_context), representedVertex(nullptr){
 
 }
-EdgeDisplay::EdgeDisplay(OpenGLContext *mp_context) : Drawable(mp_context) {
+EdgeDisplay::EdgeDisplay(OpenGLContext *mp_context) : Drawable(mp_context), representedEdge(nullptr) {
 
 }
-FaceDisplay::FaceDisplay(OpenGLContext *mp_context) : Drawable(mp_context) {
+FaceDisplay::FaceDisplay(OpenGLContext *mp_context) : Drawable(mp_context), representedFace(nullptr) {
 
 }
 GLenum VertexDisplay::drawMode() {
@@ -40,13 +40,22 @@ GLenum FaceDisplay::drawMode() {
     return GL_LINES;
 }
 void VertexDisplay::create() {
-    std::vector<glm::vec4> pos = {glm::vec4(representedVertex -> pos, 1)};
+    std::vector<glm::vec4> pos;
+    std::vector<glm::vec4> col;
+    std::vector<GLuint> idx;
 
-    std::vector<glm::vec4> col = {glm::vec4(1)};
+    count = 0;
 
-    std::vector<GLuint> idx = {0};
+    if(representedVertex) {
+         pos = {glm::vec4(representedVertex -> pos, 1)};
 
-    count = 1;
+         col = {glm::vec4(1)};
+
+         idx = {0};
+
+         count = 1;
+    }
+
 
     generateIdx();
     mp_context->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bufIdx);
@@ -61,10 +70,81 @@ void VertexDisplay::create() {
     mp_context->glBufferData(GL_ARRAY_BUFFER, col.size() * sizeof(glm::vec4), col.data(), GL_STATIC_DRAW);
 }
 void EdgeDisplay::create() {
+    std::vector<glm::vec4> pos = {
+    };
+    std::vector<glm::vec4> col = {
+    };
+    std::vector<GLuint> idx = {};
 
+    count = 0;
+
+    if(representedEdge) {
+        HalfEdge* behind = representedEdge;
+        qDebug() << "clicked on " << behind -> id;
+        qDebug() << "next" << behind->next;
+        while(behind->next->id!=representedEdge->id){
+            behind = behind->next;
+        }
+
+        pos = {glm::vec4(behind->node->pos, 1),glm::vec4(representedEdge->node->pos, 1)};
+
+        col = {glm::vec4(1, 0, 0, 1), glm::vec4(1, 1, 0, 1)};
+
+        idx = {0, 1};
+
+        count = 2;
+    }
+
+
+    generateIdx();
+    mp_context->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bufIdx);
+    mp_context->glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx.size() * sizeof(GLuint), idx.data(), GL_STATIC_DRAW);
+
+    generatePos();
+    mp_context->glBindBuffer(GL_ARRAY_BUFFER, bufPos);
+    mp_context->glBufferData(GL_ARRAY_BUFFER, pos.size() * sizeof(glm::vec4), pos.data(), GL_STATIC_DRAW);
+
+    generateCol();
+    mp_context->glBindBuffer(GL_ARRAY_BUFFER, bufCol);
+    mp_context->glBufferData(GL_ARRAY_BUFFER, col.size() * sizeof(glm::vec4), col.data(), GL_STATIC_DRAW);
 }
 void FaceDisplay::create() {
+    std::vector<glm::vec4> pos;
+    std::vector<glm::vec4> col;
+    std::vector<GLuint> idx;
 
+    count = 0;
+
+    if(representedFace) {
+        HalfEdge* edgeAt = representedFace ->edge;
+        do{
+            pos.push_back(glm::vec4(edgeAt ->node -> pos, 1));
+            pos.push_back(glm::vec4(edgeAt -> next->node -> pos, 1));
+
+            edgeAt = edgeAt -> next;
+
+            col.push_back(glm::vec4(glm::vec3(1) - representedFace->color, 1));
+            col.push_back(glm::vec4(glm::vec3(1) - representedFace->color, 1));
+
+            idx.push_back(count);
+            idx.push_back(count+1);
+            count += 2;
+        }
+        while(edgeAt->next->id != representedFace -> edge -> id);
+
+    }
+
+    generateIdx();
+    mp_context->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bufIdx);
+    mp_context->glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx.size() * sizeof(GLuint), idx.data(), GL_STATIC_DRAW);
+
+    generatePos();
+    mp_context->glBindBuffer(GL_ARRAY_BUFFER, bufPos);
+    mp_context->glBufferData(GL_ARRAY_BUFFER, pos.size() * sizeof(glm::vec4), pos.data(), GL_STATIC_DRAW);
+
+    generateCol();
+    mp_context->glBindBuffer(GL_ARRAY_BUFFER, bufCol);
+    mp_context->glBufferData(GL_ARRAY_BUFFER, col.size() * sizeof(glm::vec4), col.data(), GL_STATIC_DRAW);
 }
 
 
@@ -121,6 +201,11 @@ void MyGL::initializeGL()
     //m_geomSquare.create();
     m_mesh.create();
 
+    //setup the displays
+    m_vertDisplay.create();
+    m_faceDisplay.create();
+    m_edgeDisplay.create();
+
     // Create and set up the diffuse shader
     m_progLambert.create(":/glsl/lambert.vert.glsl", ":/glsl/lambert.frag.glsl");
     // Create and set up the flat lighting shader
@@ -176,7 +261,13 @@ void MyGL::paintGL()
 //    m_progLambert.draw(m_geomSquare);
 
     //draw the mesh
+
     m_progFlat.draw(m_mesh);
+    glDisable(GL_DEPTH_TEST);
+    m_progFlat.draw(m_vertDisplay);
+    m_progFlat.draw(m_edgeDisplay);
+    m_progFlat.draw(m_faceDisplay);
+    glEnable(GL_DEPTH_TEST);
 }
 
 
@@ -241,6 +332,8 @@ void MyGL::slot_loadobj() {
     QTextStream stream(&file);
 
     m_mesh.clear();
+    m_mesh.destroy();
+    m_mesh = Mesh(this);
 
     while (!stream.atEnd()){
         line = stream.readLine().split(' ');

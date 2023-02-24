@@ -9,32 +9,28 @@
 #include <QOpenGLShaderProgram>
 #include <QListWidgetItem>
 
-struct HalfEdge;
+class HalfEdge;
 
-struct Face : public QListWidgetItem{
+class Face : public QListWidgetItem{
 public:
     static int index;
     HalfEdge* edge;
     glm::vec3 color;
     int id;
-    Face() : color(glm::vec3((rand() % 100)/100.0, (rand() % 100)/100.0, (rand() % 100)/100.0)), id(index++){
-        setText(QString("Face %1").arg(id));
-    }
+    Face();
 };
 
-struct Vertex : public QListWidgetItem{
+class Vertex : public QListWidgetItem{
 public:
     static int index;
     HalfEdge* edge;
     glm::vec3 pos;
     int id;
 
-    Vertex(glm::vec3 p) : pos(p), id(index++){
-        setText(QString("Vertex %1").arg(id));
-    }
+    Vertex(glm::vec3 p);
 };
 
-struct HalfEdge : public QListWidgetItem{
+class HalfEdge : public QListWidgetItem{
 public:
     static int index;
     HalfEdge* next;
@@ -42,9 +38,7 @@ public:
     Face* face;
     Vertex* node;
     int id;
-    HalfEdge(Face* f, Vertex* v): face(f), node(v), id(index++) {
-        setText(QString("Edge %1").arg(id));
-    }
+    HalfEdge(Face* f, Vertex* v);
 
 };
 

@@ -3,8 +3,17 @@
 #include <iostream>
 
 int Face::index = 0;
+Face::Face() : color(glm::vec3((rand() % 100)/100.0, (rand() % 100)/100.0, (rand() % 100)/100.0)), id(index++){
+    setText(QString("Face %1").arg(id));
+}
 int Vertex::index = 0;
+Vertex::Vertex(glm::vec3 p) : pos(p), id(index++){
+    setText(QString("Vertex %1").arg(id));
+}
 int HalfEdge::index = 0;
+HalfEdge::HalfEdge(Face* f, Vertex* v): face(f), node(v), id(index++) {
+    setText(QString("Edge %1").arg(id));
+}
 
 Mesh::Mesh(OpenGLContext *mp_context) : Drawable(mp_context)
 {
@@ -53,29 +62,29 @@ void Mesh::create() {
             //create a new half-edge, set it as the edge pointer of the vertex and face, and add to halfedges
             new_edges.push_back(HalfEdge(&new_face, vertices[vi].get()));
             vertices[vi].get() -> edge = &new_edges[new_edges.size()-1];
-            new_face.edge = &new_edges[new_edges.size()-1];
+            faces[faces.size()-1].get()->edge = &new_edges[new_edges.size()-1];
             halfedges.push_back(mkU<HalfEdge>(new_edges[new_edges.size()-1]));
         }
 
         //cycle through the new half-edges, linking neighbors and finding symmetrical half-edges
         int num_edges = new_edges.size();
         for(int i = 0; i < num_edges; i++) {
-            new_edges[i].next = &new_edges[(i+1)%num_edges];
+            halfedges[new_edges[i].id]->next = halfedges[new_edges[(i+1)%num_edges].id].get();
             //grab the endpoint vertex ids for the half-edge
             int v1 = new_edges[(i-1+num_edges)%num_edges].node -> id;
             int v2 = new_edges[i].node -> id;
             //checks if sym edge already exists, and links the two
             if(symFinder.count(v2*symMax + v1)) {
-                new_edges[i].mirror = symFinder[v2*symMax + v1];
-                symFinder[v2*symMax + v1] -> mirror = &new_edges[i];
+                halfedges[new_edges[i].id].get()->mirror = symFinder[v2*symMax + v1];
+                symFinder[v2*symMax + v1] -> mirror = halfedges[new_edges[i].id].get();
                 symFinder.erase(v2*symMax + v1);
             }
             else {
-                symFinder[v1*symMax + v2] = &new_edges[i];
+                symFinder[v1*symMax + v2] = halfedges[new_edges[i].id].get();
             }
         }
 
-        for(int i = min_idx+1; i < pos.size()-1; i++) {
+        for(unsigned long i = min_idx+1; i < pos.size()-1; i++) {
             idx.push_back(min_idx);
             idx.push_back(i);
             idx.push_back(i+1);
@@ -108,14 +117,18 @@ void Mesh::create() {
 
 //clears the data
 void Mesh::clear() {
+    faces.clear();
+    vertices.clear();
+    halfedges.clear();
+
     v.clear();
     vt.clear();
     vn.clear();
     f.clear();
 
-    faces.clear();
-    vertices.clear();
-    halfedges.clear();
+    Face::index = 0;
+    Vertex::index = 0;
+    HalfEdge::index = 0;
 }
 
 GLenum Mesh::drawMode() {

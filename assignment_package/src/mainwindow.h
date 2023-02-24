@@ -28,6 +28,12 @@ private slots:
     void slot_addVertexToListWidget(QListWidgetItem *i);
 
     void slot_addEdgeToListWidget(QListWidgetItem *i);
+
+    void slot_onFaceItemClicked(QListWidgetItem* item);
+
+    void slot_onVertexItemClicked(QListWidgetItem* item);
+
+    void slot_onEdgeItemClicked(QListWidgetItem* item);
 private:
     Ui::MainWindow *ui;
 };
