@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1057</width>
-    <height>492</height>
+    <height>558</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -325,6 +325,19 @@
     </property>
     <property name="autoDefault">
      <bool>false</bool>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="ccButton">
+    <property name="geometry">
+     <rect>
+      <x>800</x>
+      <y>410</y>
+      <width>121</width>
+      <height>32</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>CatMull-Clarker</string>
     </property>
    </widget>
   </widget>

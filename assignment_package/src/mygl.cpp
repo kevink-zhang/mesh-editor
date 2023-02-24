@@ -80,8 +80,6 @@ void EdgeDisplay::create() {
 
     if(representedEdge) {
         HalfEdge* behind = representedEdge;
-        qDebug() << "clicked on " << behind -> id;
-        qDebug() << "next" << behind->next;
         while(behind->next->id!=representedEdge->id){
             behind = behind->next;
         }
@@ -395,16 +393,16 @@ void MyGL::slot_loadobj() {
 
     //initalize mesh vertices
     for(glm::vec4 vertex: v) {
-        m_mesh.vertices.push_back(mkU<Vertex>(Vertex(glm::vec3(vertex))));
+        m_mesh.vertices.push_back(mkU<Vertex>(glm::vec3(vertex)));
     }
 
     //for sym edge finding
     std::map<long, HalfEdge*> symFinder;
-    long symMax = v.size()+1;
+    long symMax = m_mesh.getVert(-1)->id + 1; //last added vertex should have maximal id
 
     //initialize mesh faces
     for(std::vector<glm::vec3> new_face : f) {
-        m_mesh.faces.push_back(mkU<Face>(Face()));
+        m_mesh.faces.push_back(mkU<Face>());
 
         std::vector<HalfEdge*> new_edges;
 
@@ -413,7 +411,7 @@ void MyGL::slot_loadobj() {
             int vi = vertex[0]-1;
 
             //create a new half-edge, set it as the edge pointer of the vertex and face, and add to halfedges
-            m_mesh.halfedges.push_back(mkU<HalfEdge>(HalfEdge(m_mesh.getFace(-1), m_mesh.getVert(vi))));
+            m_mesh.halfedges.push_back(mkU<HalfEdge>(m_mesh.getFace(-1), m_mesh.getVert(vi)));
             new_edges.push_back(m_mesh.getEdge(-1));
             m_mesh.getVert(vi) -> edge = m_mesh.getEdge(-1);
             m_mesh.getFace(-1)->edge = m_mesh.getEdge(-1);
@@ -451,4 +449,23 @@ void MyGL::slot_loadobj() {
     for(int i = 0; i < m_mesh.halfedges.size(); i++) {
         emit sig_sendEdgeListNode(m_mesh.getEdge(i));
     }
+}
+
+void MyGL::slot_catmullclark() {
+    long old_size = m_mesh.vertices.size();
+    m_mesh.CatmullClark();
+
+    for(int i = 0; i < m_mesh.faces.size(); i++) {
+        emit sig_sendFaceListNode(m_mesh.getFace(i));
+    }
+
+    for(int i = 0; i < m_mesh.vertices.size(); i++) {
+        emit sig_sendVertexListNode(m_mesh.getVert(i));
+    }
+
+    for(int i = old_size; i < m_mesh.halfedges.size(); i++) {
+        emit sig_sendEdgeListNode(m_mesh.getEdge(i));
+    }
+    m_mesh.create();
+    update();
 }

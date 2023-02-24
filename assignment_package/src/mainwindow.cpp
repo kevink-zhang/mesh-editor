@@ -13,6 +13,10 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->loadOBJButton, SIGNAL(clicked()),
             ui->mygl, SLOT(slot_loadobj()));
 
+    //connect catmull clark button
+    connect(ui->ccButton, SIGNAL(clicked()),
+            ui->mygl, SLOT(slot_catmullclark()));
+
     connect(ui->mygl,
             // Signal name
             SIGNAL(sig_sendFaceListNode(QListWidgetItem*)),
@@ -75,24 +79,24 @@ void MainWindow::slot_addEdgeToListWidget(QListWidgetItem *i) {
 
 void MainWindow::slot_onFaceItemClicked(QListWidgetItem* item)
 {
-    ui->mygl->m_faceDisplay.destroy();
     ui->mygl->m_faceDisplay = FaceDisplay(ui->mygl);
     ui->mygl->m_faceDisplay.representedFace = (Face*) item;
     ui->mygl->m_faceDisplay.create();
+    ui->mygl->update();
 }
 
 void MainWindow::slot_onVertexItemClicked(QListWidgetItem* item)
 {
-    ui->mygl->m_vertDisplay.destroy();
     ui->mygl->m_vertDisplay = VertexDisplay(ui->mygl);
     ui->mygl->m_vertDisplay.representedVertex = (Vertex*) item;
     ui->mygl->m_vertDisplay.create();
+    ui->mygl->update();
 }
 
 void MainWindow::slot_onEdgeItemClicked(QListWidgetItem* item)
 {
-    ui->mygl->m_edgeDisplay.destroy();
     ui->mygl->m_edgeDisplay = EdgeDisplay(ui->mygl);
     ui->mygl->m_edgeDisplay.representedEdge = (HalfEdge*) item;
     ui->mygl->m_edgeDisplay.create();
+    ui->mygl->update();
 }

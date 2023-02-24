@@ -81,6 +81,7 @@ signals:
     void sig_sendEdgeListNode(QListWidgetItem*);
 public slots:
     void slot_loadobj();
+    void slot_catmullclark();
 };
 
 

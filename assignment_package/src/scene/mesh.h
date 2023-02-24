@@ -52,11 +52,12 @@ public:
     Mesh(OpenGLContext* mp_context);
     virtual void create();
     virtual GLenum drawMode();
+    void CatmullClark();
     void clear();
 
-    Face* getFace(int i);
-    Vertex* getVert(int i);
-    HalfEdge* getEdge(int i);
+    Face* getFace(int i) ;
+    Vertex* getVert(int i) ;
+    HalfEdge* getEdge(int i) ;
 
     //storing obj file info
 };
