@@ -54,9 +54,9 @@ public:
     virtual GLenum drawMode();
     void clear();
 
+    Face* getFace(int i);
+    Vertex* getVert(int i);
+    HalfEdge* getEdge(int i);
+
     //storing obj file info
-    std::vector<glm::vec4> v;
-    std::vector<glm::vec2> vt;
-    std::vector<glm::vec4> vn;
-    std::vector<std::vector<glm::vec3>> f;
 };

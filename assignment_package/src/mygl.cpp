@@ -130,7 +130,7 @@ void FaceDisplay::create() {
             idx.push_back(count+1);
             count += 2;
         }
-        while(edgeAt->next->id != representedFace -> edge -> id);
+        while(edgeAt != representedFace -> edge);
 
     }
 
@@ -262,11 +262,11 @@ void MyGL::paintGL()
 
     //draw the mesh
 
-    m_progFlat.draw(m_mesh);
+    m_progLambert.draw(m_mesh);
     glDisable(GL_DEPTH_TEST);
-    m_progFlat.draw(m_vertDisplay);
-    m_progFlat.draw(m_edgeDisplay);
     m_progFlat.draw(m_faceDisplay);
+    m_progFlat.draw(m_edgeDisplay);
+    m_progFlat.draw(m_vertDisplay);
     glEnable(GL_DEPTH_TEST);
 }
 
@@ -308,6 +308,39 @@ void MyGL::keyPressEvent(QKeyEvent *e)
         m_glCamera.TranslateAlongUp(amount);
     } else if (e->key() == Qt::Key_R) {
         m_glCamera = Camera(this->width(), this->height());
+    } else if (e->key() == Qt::Key_N) {
+        if(m_edgeDisplay.representedEdge) {
+            m_edgeDisplay.representedEdge = m_edgeDisplay.representedEdge -> next;
+            m_edgeDisplay.create();
+        }
+    } else if (e->key() == Qt::Key_M) {
+        if(m_edgeDisplay.representedEdge) {
+            m_edgeDisplay.representedEdge = m_edgeDisplay.representedEdge -> mirror;
+            m_edgeDisplay.create();
+        }
+    } else if (e->key() == Qt::Key_F) {
+        if(m_edgeDisplay.representedEdge) {
+            m_faceDisplay.representedFace = m_edgeDisplay.representedEdge -> face;
+            m_faceDisplay.create();
+        }
+    } else if (e->key() == Qt::Key_V) {
+        if(m_edgeDisplay.representedEdge) {
+            m_vertDisplay.representedVertex = m_edgeDisplay.representedEdge -> node;
+            m_vertDisplay.create();
+        }
+    } else if (e->key() == Qt::Key_H) {
+        if(e->modifiers() & Qt::ShiftModifier) {
+            if(m_faceDisplay.representedFace) {
+                m_edgeDisplay.representedEdge = m_faceDisplay.representedFace -> edge;
+                m_edgeDisplay.create();
+            }
+        }
+        else{
+            if(m_vertDisplay.representedVertex) {
+                m_edgeDisplay.representedEdge = m_vertDisplay.representedVertex -> edge;
+                m_edgeDisplay.create();
+            }
+        }
     }
     m_glCamera.RecomputeAttributes();
     update();  // Calls paintGL, among other things
@@ -333,7 +366,18 @@ void MyGL::slot_loadobj() {
 
     m_mesh.clear();
     m_mesh.destroy();
+    m_vertDisplay.representedVertex = nullptr;
+    m_edgeDisplay.representedEdge = nullptr;
+    m_faceDisplay.representedFace = nullptr;
+    m_vertDisplay.create();
+    m_edgeDisplay.create();
+    m_faceDisplay.create();
     m_mesh = Mesh(this);
+
+    std::vector<glm::vec4> v;
+    std::vector<glm::vec2> vt;
+    std::vector<glm::vec4> vn;
+    std::vector<std::vector<glm::vec3>> f;
 
     while (!stream.atEnd()){
         line = stream.readLine().split(' ');
@@ -341,13 +385,13 @@ void MyGL::slot_loadobj() {
         if(line.length() == 0) continue;
         //vertex
         if(line[0] == "v") {
-            m_mesh.v.push_back(glm::vec4(line[1].toFloat(), line[2].toFloat(), line[3].toFloat(), 1.0));
+            v.push_back(glm::vec4(line[1].toFloat(), line[2].toFloat(), line[3].toFloat(), 1.0));
         }
         else if(line[0] == "vt") {
-            m_mesh.vt.push_back(glm::vec2(line[1].toFloat(), line[2].toFloat()));
+            vt.push_back(glm::vec2(line[1].toFloat(), line[2].toFloat()));
         }
         else if(line[0] == "vn") {
-            m_mesh.vn.push_back(glm::vec4(line[1].toFloat(), line[2].toFloat(), line[3].toFloat(), 1.0));
+            vn.push_back(glm::vec4(line[1].toFloat(), line[2].toFloat(), line[3].toFloat(), 1.0));
         }
         else if(line[0] == "f") {
             std::vector<glm::vec3> someface;
@@ -355,21 +399,66 @@ void MyGL::slot_loadobj() {
                 QStringList faceinfo = line[i].split('/');
                 someface.push_back(glm::vec3(faceinfo[0].toInt(), faceinfo[1].toInt(), faceinfo[2].toInt()));
             }
-            m_mesh.f.push_back(someface);
+            f.push_back(someface);
         }
     }
+
+    //initalize mesh vertices
+    for(glm::vec4 vertex: v) {
+        m_mesh.vertices.push_back(mkU<Vertex>(Vertex(glm::vec3(vertex))));
+    }
+
+    //for sym edge finding
+    std::map<long, HalfEdge*> symFinder;
+    long symMax = v.size()+1;
+
+    //initialize mesh faces
+    for(std::vector<glm::vec3> new_face : f) {
+        m_mesh.faces.push_back(mkU<Face>(Face()));
+
+        std::vector<HalfEdge*> new_edges;
+
+        for(glm::vec3 vertex : new_face) {
+            //VBO
+            int vi = vertex[0]-1;
+
+            //create a new half-edge, set it as the edge pointer of the vertex and face, and add to halfedges
+            m_mesh.halfedges.push_back(mkU<HalfEdge>(HalfEdge(m_mesh.getFace(-1), m_mesh.getVert(vi))));
+            new_edges.push_back(m_mesh.getEdge(-1));
+            m_mesh.getVert(vi) -> edge = m_mesh.getEdge(-1);
+            m_mesh.getFace(-1)->edge = m_mesh.getEdge(-1);
+        }
+
+        int num_edges = new_edges.size();
+        for(int i = 0; i < num_edges; i++) {
+            new_edges[i]->next = new_edges[(i+1)%num_edges];
+            //grab the endpoint vertex ids for the half-edge
+            int v1 = new_edges[(i-1+num_edges)%num_edges] -> node -> id;
+            int v2 = new_edges[i] -> node -> id;
+            //checks if sym edge already exists, and links the two
+            if(symFinder.count(v2*symMax + v1)) {
+                new_edges[i]->mirror = symFinder[v2*symMax + v1];
+                symFinder[v2*symMax + v1] -> mirror = new_edges[i];
+                symFinder.erase(v2*symMax + v1);
+            }
+            else {
+                symFinder[v1*symMax + v2] = new_edges[i];
+            }
+        }
+    }
+
 
     m_mesh.create();
 
     for(int i = 0; i < m_mesh.faces.size(); i++) {
-        emit sig_sendFaceListNode(m_mesh.faces[i].get());
+        emit sig_sendFaceListNode(m_mesh.getFace(i));
     }
 
     for(int i = 0; i < m_mesh.vertices.size(); i++) {
-        emit sig_sendVertexListNode(m_mesh.vertices[i].get());
+        emit sig_sendVertexListNode(m_mesh.getVert(i));
     }
 
     for(int i = 0; i < m_mesh.halfedges.size(); i++) {
-        emit sig_sendEdgeListNode(m_mesh.halfedges[i].get());
+        emit sig_sendEdgeListNode(m_mesh.getEdge(i));
     }
 }
