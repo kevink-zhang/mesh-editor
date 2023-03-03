@@ -53,21 +53,40 @@ void Camera::RecomputeAttributes()
     right = glm::normalize(glm::cross(look, world_up));
     up = glm::cross(right, look);
 
-    float tan_fovy = tan(glm::radians(fovy/2));
+    float tan_fovy = glm::tan(fovy/2);
     float len = glm::length(ref - eye);
-    aspect = width / static_cast<float>(height);
+    aspect = width/height;
     V = up*len*tan_fovy;
     H = right*len*aspect*tan_fovy;
 }
 
 glm::mat4 Camera::getViewProj()
 {
-    return glm::perspective(glm::radians(fovy), width / (float)height, near_clip, far_clip) * glm::lookAt(eye, ref, up);
+    return glm::perspective(fovy, width / (float)height, near_clip, far_clip) * glm::lookAt(eye, ref, up);
+}
+
+glm::mat4 Camera::getView()
+{
+    return glm::lookAt(eye, ref, up);
+}
+
+glm::mat4 Camera::getProj()
+{
+    return glm::perspective(fovy, width / (float)height, near_clip, far_clip);
+}
+
+void Camera::Reset()
+{
+    fovy = 45.f;
+    eye = glm::vec3(0, 0, 12);
+    ref = glm::vec3(0, 0, 0);
+    world_up = glm::vec3(0, 1, 0);
+    RecomputeAttributes();
 }
 
 void Camera::RotateAboutUp(float deg)
 {
-    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), glm::radians(deg), up);
+    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), deg, up);
     ref = ref - eye;
     ref = glm::vec3(rotation * glm::vec4(ref, 1));
     ref = ref + eye;
@@ -75,11 +94,35 @@ void Camera::RotateAboutUp(float deg)
 }
 void Camera::RotateAboutRight(float deg)
 {
-    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), glm::radians(deg), right);
+    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), deg, right);
     ref = ref - eye;
     ref = glm::vec3(rotation * glm::vec4(ref, 1));
     ref = ref + eye;
     RecomputeAttributes();
+}
+
+void Camera::RotateTheta(float deg)
+{
+    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), deg, right);
+    eye = eye - ref;
+    eye = glm::vec3(rotation * glm::vec4(eye, 1.f));
+    eye = eye + ref;
+    RecomputeAttributes();
+}
+
+void Camera::RotatePhi(float deg)
+{
+    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), deg, up);
+    eye = eye - ref;
+    eye = glm::vec3(rotation * glm::vec4(eye, 1.f));
+    eye = eye + ref;
+    RecomputeAttributes();
+}
+
+void Camera::Zoom(float amt)
+{
+    glm::vec3 translation = look * amt;
+    eye += translation;
 }
 
 void Camera::TranslateAlongLook(float amt)

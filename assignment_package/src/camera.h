@@ -28,16 +28,24 @@ public:
               world_up, //The normalized vector pointing upwards IN WORLD SPACE. This is primarily used for computing the camera's initial UP vector.
               V,        //Represents the vertical component of the plane of the viewing frustum that passes through the camera's reference point. Used in Camera::Raycast.
               H;        //Represents the horizontal component of the plane of the viewing frustum that passes through the camera's reference point. Used in Camera::Raycast.
-    float theta, phi;
 
     glm::mat4 getViewProj();
+    glm::mat4 getView();
+    glm::mat4 getProj();
 
     void RecomputeAttributes();
 
     void RotateAboutUp(float deg);
     void RotateAboutRight(float deg);
 
+    void RotateTheta(float deg);
+    void RotatePhi(float deg);
+
     void TranslateAlongLook(float amt);
     void TranslateAlongRight(float amt);
     void TranslateAlongUp(float amt);
+
+    void Zoom(float amt);
+
+    void Reset();
 };

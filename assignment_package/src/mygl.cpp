@@ -259,7 +259,6 @@ void MyGL::paintGL()
     glEnable(GL_DEPTH_TEST);
 }
 
-
 void MyGL::keyPressEvent(QKeyEvent *e)
 {
     float amount = 2.0f;
@@ -272,13 +271,13 @@ void MyGL::keyPressEvent(QKeyEvent *e)
     if (e->key() == Qt::Key_Escape) {
         QApplication::quit();
     } else if (e->key() == Qt::Key_Right) {
-        m_glCamera.RotateAboutUp(-amount);
+        m_glCamera.RotatePhi(glm::radians(-amount));
     } else if (e->key() == Qt::Key_Left) {
-        m_glCamera.RotateAboutUp(amount);
+        m_glCamera.RotatePhi(glm::radians(amount));
     } else if (e->key() == Qt::Key_Up) {
-        m_glCamera.RotateAboutRight(-amount);
+        m_glCamera.RotateTheta(glm::radians(-amount));
     } else if (e->key() == Qt::Key_Down) {
-        m_glCamera.RotateAboutRight(amount);
+        m_glCamera.RotateTheta(glm::radians(amount));
     } else if (e->key() == Qt::Key_1) {
         m_glCamera.fovy += amount;
     } else if (e->key() == Qt::Key_2) {
@@ -335,6 +334,10 @@ void MyGL::keyPressEvent(QKeyEvent *e)
             }
         }
         emit sig_edgeclick(m_edgeDisplay.representedEdge);
+    } else if (e->key() == Qt::Key_Comma) {
+        m_glCamera.Zoom(-2);
+    } else if (e->key() == Qt::Key_Period) {
+        m_glCamera.Zoom(2);
     }
     m_glCamera.RecomputeAttributes();
     update();  // Calls paintGL, among other things
