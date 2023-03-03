@@ -10,19 +10,30 @@ long dictEdge(HalfEdge* prev, long maxID) {
 }
 
 int Face::index = 0;
-Face::Face() : color(glm::vec3((rand() % 100)/100.0, (rand() % 100)/100.0, (rand() % 100)/100.0)), id(index++){
-    setText(QString("Face %1").arg(id));
+Face::Face() : color(glm::vec3((rand() % 100)/100.0, (rand() % 100)/100.0, (rand() % 100)/100.0)), sharp(false), id(index++){
+    setText(QString("Face %1").arg(id+1));
 }
 int Vertex::index = 0;
-Vertex::Vertex(glm::vec3 p) : pos(p), id(index++){
-    setText(QString("Vertex %1").arg(id));
+Vertex::Vertex(glm::vec3 p) : pos(p), sharp(false), id(index++){
+    setText(QString("Vertex %1").arg(id+1));
 }
 int HalfEdge::index = 0;
-HalfEdge::HalfEdge(Face* f, Vertex* v): face(f), node(v), id(index++) {
-    setText(QString("Edge %1").arg(id));
+HalfEdge::HalfEdge(Face* f, Vertex* v): face(f), node(v), sharp(false), id(index++) {
+    setText(QString("Edge %1").arg(id+1));
 }
 
-Mesh::Mesh(OpenGLContext *mp_context) : Drawable(mp_context)
+void Face::makeSharp(bool value) {
+    sharp = value;
+    HalfEdge* edgeAt = edge;
+    do{
+        edgeAt->node->sharp = value;
+        edgeAt->sharp = value;
+        edgeAt->mirror->sharp = value;
+        edgeAt = edgeAt->next;
+    } while(edgeAt != edge);
+}
+
+Mesh::Mesh(OpenGLContext *mp_context) : Drawable(mp_context), sharpness(1.f)
 {
 
 }
@@ -35,6 +46,19 @@ Vertex* Mesh::getVert(int i)  {
 }
 HalfEdge* Mesh::getEdge(int i)  {
     return halfedges[(i+halfedges.size())%halfedges.size()].get();
+}
+
+Face* Mesh::makeFace(){
+    faces.push_back(mkU<Face>());
+    return getFace(-1);
+}
+Vertex* Mesh::makeVert(glm::vec3 pos){
+    vertices.push_back(mkU<Vertex>(pos));
+    return getVert(-1);
+}
+HalfEdge* Mesh::makeEdge(Face* f, Vertex* v){
+    halfedges.push_back(mkU<HalfEdge>(f, v));
+    return getEdge(-1);
 }
 
 void Mesh::create() {
@@ -93,6 +117,7 @@ void Mesh::create() {
 
 //catmull-clark
 void Mesh::CatmullClark() {
+    if(vertices.empty()) return;
     //calculate centroids
     std::map<Face*, glm::vec3> centroids;
     std::map<Vertex*, glm::vec3> new_pos;
@@ -121,8 +146,12 @@ void Mesh::CatmullClark() {
     }
     //calculate smoothed midpoints
     std::map<long, glm::vec3> midpts;
+    std::map<long, glm::vec3> midptave;
+    std::map<long, bool> midptsharps;
+
     long maxID = getVert(-1)->id+1;
     std::map<Vertex*, int> n;
+    std::map<Vertex*, std::vector<HalfEdge*>> n_sharp;
 
     for(int i = 0; i < halfedges.size(); i++) {
         HalfEdge* prev_edge = getEdge(i);
@@ -138,20 +167,38 @@ void Mesh::CatmullClark() {
             else{
                 midpts[dictEdge(prev_edge, maxID)] /= 3.f;
             }
+            //sharpness things
+            midptave[dictEdge(prev_edge, maxID)] = (this_edge->node->pos+prev_edge->node->pos)/2.f;
+            midptsharps[dictEdge(prev_edge, maxID)] = this_edge->sharp;
         }
-
+        //count
         if(!n.count(this_edge->node)) n[this_edge->node] = 0;
         n[this_edge->node]++;
+        if(!n_sharp.count(this_edge->node))
+            n_sharp[this_edge->node] = std::vector<HalfEdge*>();
+        if(this_edge->sharp && n_sharp[this_edge->node].size() <= 3)
+            n_sharp[this_edge->node].push_back(this_edge);
         new_pos[this_edge -> node] += midpts[dictEdge(prev_edge, maxID)];
     }
     //smooth the og vertices
     for(int i = 0; i < vertices.size(); i++) {
         new_pos[getVert(i)]/=(float)(n[getVert(i)]*n[getVert(i)]);
         new_pos[getVert(i)]+=(n[getVert(i)]-2.f)/(float)n[getVert(i)]*getVert(i)->pos;
-        qDebug() << getVert(i)->pos[0]<< getVert(i)->pos[1]<< getVert(i)->pos[2];
-        qDebug() << new_pos[getVert(i)][0]<< new_pos[getVert(i)][1]<< new_pos[getVert(i)][2];
-        qDebug() << "--";
-        getVert(i)->pos = new_pos[getVert(i)];
+        //vertex is sharp, or has 3+ adj sharp edges
+        if(getVert(i)->sharp || n_sharp[getVert(i)].size() >= 3){
+            //use og position
+            getVert(i)->pos = getVert(i)->pos * sharpness + new_pos[getVert(i)] * (1-sharpness);
+        }
+        //vertex is not sharp, but has 2 adj sharp edges
+        else if (n_sharp[getVert(i)].size() == 2){
+            glm::vec3 endpt1 = n_sharp[getVert(i)][0]->mirror->node->pos;
+            glm::vec3 endpt2 = n_sharp[getVert(i)][1]->mirror->node->pos;
+            getVert(i)->pos = (0.75f*(getVert(i)->pos) + 0.125f*(endpt1 + endpt2)) * sharpness + new_pos[getVert(i)] * (1-sharpness);
+        }
+        //vertex is not sharp
+        else {
+            getVert(i)->pos = new_pos[getVert(i)];
+        }
     }
     //subdivision new vectors
     std::vector<uPtr<Face>> new_faces;
@@ -166,12 +213,14 @@ void Mesh::CatmullClark() {
     std::map<long, Vertex*> midpt_map;
 
     for(std::map<Face*,glm::vec3>::iterator it = centroids.begin(); it != centroids.end(); ++it) {
-        vertices.push_back(mkU<Vertex>(it->second));
-        centroid_map[it->first] = getVert(-1);
+        centroid_map[it->first] = makeVert(it->second);
     }
+    //sharpness for edges implemented here for midpts
     for(std::map<long, glm::vec3>::iterator it = midpts.begin(); it != midpts.end(); ++it) {
-        vertices.push_back(mkU<Vertex>(it->second));
-        midpt_map[it->first] = getVert(-1);
+        if(midptsharps[it->first])
+            midpt_map[it->first] = makeVert((1-sharpness)* (it->second) + sharpness * midptave[it->first]);
+        else
+             midpt_map[it->first] = makeVert(it->second);
     }
 
     //go through each old face and quadrangalize on it
@@ -185,10 +234,14 @@ void Mesh::CatmullClark() {
             //find the quadrangle vertices
             Vertex* new_verts[4] = {centroid_map[getFace(i)], midpt_map[dictEdge(prev, maxID)], prev->next->node, midpt_map[dictEdge(prev->next, maxID)]};
             HalfEdge* new_edge[4];
+            bool new_sharps[4] = {
+                false, false, prev->sharp, prev->next->sharp
+            };
             //add in new edges, link to vertex and face
             for(int i = 0; i < 4; i++) {
                 new_halfedges.push_back(mkU<HalfEdge>(new_face, new_verts[i]));
                 new_edge[i] = new_halfedges[new_halfedges.size()-1].get();
+                new_edge[i]->sharp = new_sharps[i];
                 new_verts[i]->edge = new_edge[i];
                 new_face->edge = new_edge[i];
             }

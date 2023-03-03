@@ -34,6 +34,10 @@ private slots:
     void slot_onVertexItemClicked(QListWidgetItem* item);
 
     void slot_onEdgeItemClicked(QListWidgetItem* item);
+
+    void slot_toggleEdgeSharp(int value);
+    void slot_toggleFaceSharp(int value);
+    void slot_toggleVertSharp(int value);
 private:
     Ui::MainWindow *ui;
 };

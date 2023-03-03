@@ -301,21 +301,25 @@ void MyGL::keyPressEvent(QKeyEvent *e)
         if(m_edgeDisplay.representedEdge) {
             m_edgeDisplay.representedEdge = m_edgeDisplay.representedEdge -> next;
             m_edgeDisplay.create();
+            emit sig_edgeclick(m_edgeDisplay.representedEdge);
         }
     } else if (e->key() == Qt::Key_M) {
         if(m_edgeDisplay.representedEdge) {
             m_edgeDisplay.representedEdge = m_edgeDisplay.representedEdge -> mirror;
             m_edgeDisplay.create();
+            emit sig_edgeclick(m_edgeDisplay.representedEdge);
         }
     } else if (e->key() == Qt::Key_F) {
         if(m_edgeDisplay.representedEdge) {
             m_faceDisplay.representedFace = m_edgeDisplay.representedEdge -> face;
             m_faceDisplay.create();
+            emit sig_faceclick(m_faceDisplay.representedFace);
         }
     } else if (e->key() == Qt::Key_V) {
         if(m_edgeDisplay.representedEdge) {
             m_vertDisplay.representedVertex = m_edgeDisplay.representedEdge -> node;
             m_vertDisplay.create();
+            emit sig_vertclick(m_vertDisplay.representedVertex);
         }
     } else if (e->key() == Qt::Key_H) {
         if(e->modifiers() & Qt::ShiftModifier) {
@@ -330,6 +334,7 @@ void MyGL::keyPressEvent(QKeyEvent *e)
                 m_edgeDisplay.create();
             }
         }
+        emit sig_edgeclick(m_edgeDisplay.representedEdge);
     }
     m_glCamera.RecomputeAttributes();
     update();  // Calls paintGL, among other things
@@ -361,6 +366,9 @@ void MyGL::slot_loadobj() {
     m_vertDisplay.create();
     m_edgeDisplay.create();
     m_faceDisplay.create();
+    emit sig_edgeclick(nullptr);
+    emit sig_faceclick(nullptr);
+    emit sig_vertclick(nullptr);
 
     std::vector<glm::vec4> v;
     std::vector<glm::vec2> vt;
@@ -393,7 +401,7 @@ void MyGL::slot_loadobj() {
 
     //initalize mesh vertices
     for(glm::vec4 vertex: v) {
-        m_mesh.vertices.push_back(mkU<Vertex>(glm::vec3(vertex)));
+        m_mesh.makeVert(glm::vec3(vertex));
     }
 
     //for sym edge finding
@@ -402,7 +410,7 @@ void MyGL::slot_loadobj() {
 
     //initialize mesh faces
     for(std::vector<glm::vec3> new_face : f) {
-        m_mesh.faces.push_back(mkU<Face>());
+        m_mesh.makeFace();
 
         std::vector<HalfEdge*> new_edges;
 
@@ -411,8 +419,7 @@ void MyGL::slot_loadobj() {
             int vi = vertex[0]-1;
 
             //create a new half-edge, set it as the edge pointer of the vertex and face, and add to halfedges
-            m_mesh.halfedges.push_back(mkU<HalfEdge>(m_mesh.getFace(-1), m_mesh.getVert(vi)));
-            new_edges.push_back(m_mesh.getEdge(-1));
+            new_edges.push_back(m_mesh.makeEdge(m_mesh.getFace(-1), m_mesh.getVert(vi)));
             m_mesh.getVert(vi) -> edge = m_mesh.getEdge(-1);
             m_mesh.getFace(-1)->edge = m_mesh.getEdge(-1);
         }
@@ -459,13 +466,196 @@ void MyGL::slot_catmullclark() {
         emit sig_sendFaceListNode(m_mesh.getFace(i));
     }
 
-    for(int i = 0; i < m_mesh.vertices.size(); i++) {
+    for(int i = old_size; i < m_mesh.vertices.size(); i++) {
         emit sig_sendVertexListNode(m_mesh.getVert(i));
     }
 
-    for(int i = old_size; i < m_mesh.halfedges.size(); i++) {
+    for(int i = 0; i < m_mesh.halfedges.size(); i++) {
         emit sig_sendEdgeListNode(m_mesh.getEdge(i));
     }
+
+    m_vertDisplay.representedVertex = nullptr;
+    m_edgeDisplay.representedEdge = nullptr;
+    m_faceDisplay.representedFace = nullptr;
+    m_vertDisplay.create();
+    m_edgeDisplay.create();
+    m_faceDisplay.create();
     m_mesh.create();
     update();
 }
+
+void MyGL::slot_splitedge() {
+    if(!m_edgeDisplay.representedEdge) return;
+    HalfEdge* e1 = m_edgeDisplay.representedEdge;
+    HalfEdge* e2 = m_edgeDisplay.representedEdge->mirror;
+    Vertex* v1 = e1->node;
+    Vertex* v2 = e2->node;
+    //average endpoints for new position
+    Vertex* v3 = m_mesh.makeVert((v1->pos + v2->pos)/2.f);
+    HalfEdge* ee1 = m_mesh.makeEdge(e1->face, v1);
+    ee1->next = e1->next;
+    e1->next = ee1;
+    e1->node = v3;
+    HalfEdge* ee2 = m_mesh.makeEdge(e2->face, v2);
+    ee2->next = e2->next;
+    e2->next = ee2;
+    e2->node = v3;
+    //set sym
+    ee1->mirror = e2;
+    e2->mirror = ee1;
+    ee2->mirror = e1;
+    e1->mirror = ee2;
+    //set edge vertex pointers
+    v3->edge = e1;
+    v1->edge = ee1;
+    v2->edge = ee2;
+
+    emit sig_sendEdgeListNode(m_mesh.getEdge(-2));
+    emit sig_sendEdgeListNode(m_mesh.getEdge(-1));
+    emit sig_sendVertexListNode(m_mesh.getVert(-1));
+    m_mesh.getEdge(-2)->sharp = e1->sharp;
+    m_mesh.getEdge(-1)->sharp = e1->sharp;
+    m_mesh.getVert(-1)->sharp = e1->sharp;
+
+    m_edgeDisplay.representedEdge = nullptr;
+    m_edgeDisplay.create();
+    update();
+}
+
+void MyGL::slot_triangulateface() {
+    if(!m_faceDisplay.representedFace) return;
+
+    //to triangulate, we will modify the current face and add in n-3 new faces
+    HalfEdge* start = m_faceDisplay.representedFace->edge;
+    HalfEdge* edgeAt = m_faceDisplay.representedFace->edge;
+    int edge_count = m_mesh.halfedges.size();
+    int face_count = m_mesh.faces.size();
+
+    //need to store edges to modify ->next at once
+    std::vector<HalfEdge*> oldEdges;
+    do{
+        oldEdges.push_back(edgeAt);
+        edgeAt = edgeAt->next;
+    } while(edgeAt != start);
+    Vertex* pivot = oldEdges[oldEdges.size()-1]->node;
+
+    //iterate through the edges, do not use ->next
+    //the edges we make are symmetric, so bind those to each other
+    HalfEdge* last_sym = nullptr;
+    for(int i = 1; i <= oldEdges.size()-2; i++) {
+        Face* this_face;
+        if(i == 1) {
+            //use this face
+            this_face = m_faceDisplay.representedFace;
+            Vertex* v1 = oldEdges[0] -> node;
+
+            //add in new half edges
+            pivot->edge = m_mesh.makeEdge(this_face, pivot);
+            v1->edge = oldEdges[0];
+            pivot->edge->next = v1->edge;
+            v1->edge->next = oldEdges[1];
+            oldEdges[1]->next = pivot->edge;
+            //initialize symmetric pointer
+            last_sym = pivot->edge;
+        }
+        else if(i == oldEdges.size()-2) {
+            //make new face
+            this_face = m_mesh.makeFace();
+            this_face->edge = oldEdges[i];
+            Vertex* v1 = oldEdges[(i-1+oldEdges.size())%oldEdges.size()] -> node;
+
+            //add in new half edges
+            pivot->edge = oldEdges[i+1];
+            v1->edge = m_mesh.makeEdge(this_face, v1);
+            pivot->edge->next = v1->edge;
+            v1->edge->next = oldEdges[i];
+            oldEdges[i]->next = pivot->edge;
+            //set sym
+            v1->edge->mirror = last_sym;
+            last_sym->mirror = v1->edge;
+        }
+        else{
+            //make new face
+            this_face = m_mesh.makeFace();
+            this_face->edge = oldEdges[i];
+            Vertex* v1 = oldEdges[(i-1+oldEdges.size())%oldEdges.size()] -> node;
+
+            //add in new half edges
+            pivot->edge = m_mesh.makeEdge(this_face, pivot);
+            v1->edge = m_mesh.makeEdge(this_face, v1);
+            pivot->edge->next = v1->edge;
+            v1->edge->next = oldEdges[i];
+            oldEdges[i]->next = pivot->edge;
+            //set sym
+            v1->edge->mirror = last_sym;
+            last_sym->mirror = v1->edge;
+            last_sym = pivot->edge;
+        }
+    }
+
+    //create the widgets and do sharpness
+    for(int i = face_count; i < m_mesh.faces.size(); i++) {
+        emit sig_sendFaceListNode(m_mesh.getFace(i));
+        m_mesh.getFace(i) -> makeSharp(m_faceDisplay.representedFace->sharp);
+    }
+
+    for(int i = edge_count; i < m_mesh.halfedges.size(); i++) {
+        emit sig_sendEdgeListNode(m_mesh.getEdge(i));
+    }
+
+    m_faceDisplay.representedFace = nullptr;
+    m_faceDisplay.create();
+    m_mesh.create();
+    update();
+}
+
+void MyGL::slot_setRed(double value) {
+    if(!m_faceDisplay.representedFace) return;
+    m_faceDisplay.representedFace->color[0] = value;
+    m_mesh.create();
+    m_faceDisplay.create();
+    update();
+}
+void MyGL::slot_setGreen(double value) {
+    if(!m_faceDisplay.representedFace) return;
+    m_faceDisplay.representedFace->color[1] = value;
+    m_mesh.create();
+    m_faceDisplay.create();
+    update();
+}
+void MyGL::slot_setBlue(double value) {
+    if(!m_faceDisplay.representedFace) return;
+    m_faceDisplay.representedFace->color[2] = value;
+    m_mesh.create();
+    m_faceDisplay.create();
+    update();
+}
+
+void MyGL::slot_setX(double value) {
+    if(!m_vertDisplay.representedVertex) return;
+    m_vertDisplay.representedVertex->pos[0] = value;
+    m_mesh.create();
+    m_vertDisplay.create();
+    update();
+}
+
+void MyGL::slot_setY(double value) {
+    if(!m_vertDisplay.representedVertex) return;
+    m_vertDisplay.representedVertex->pos[1] = value;
+    m_mesh.create();
+    m_vertDisplay.create();
+    update();
+}
+
+void MyGL::slot_setZ(double value) {
+    if(!m_vertDisplay.representedVertex) return;
+    m_vertDisplay.representedVertex->pos[2] = value;
+    m_mesh.create();
+    m_vertDisplay.create();
+    update();
+}
+
+void MyGL::slot_setSharpness(double value) {
+    m_mesh.sharpness = value;
+}
+

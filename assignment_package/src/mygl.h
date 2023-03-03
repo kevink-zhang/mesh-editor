@@ -79,9 +79,24 @@ signals:
     void sig_sendFaceListNode(QListWidgetItem*);
     void sig_sendVertexListNode(QListWidgetItem*);
     void sig_sendEdgeListNode(QListWidgetItem*);
+    void sig_faceclick(QListWidgetItem*);
+    void sig_edgeclick(QListWidgetItem*);
+    void sig_vertclick(QListWidgetItem*);
 public slots:
     void slot_loadobj();
     void slot_catmullclark();
+    void slot_splitedge();
+    void slot_triangulateface();
+
+    void slot_setRed(double value);
+    void slot_setGreen(double value);
+    void slot_setBlue(double value);
+
+    void slot_setX(double value);
+    void slot_setY(double value);
+    void slot_setZ(double value);
+
+    void slot_setSharpness(double value);
 };
 
 
