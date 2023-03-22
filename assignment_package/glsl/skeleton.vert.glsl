@@ -61,6 +61,9 @@ void main()
         float f = vs_JointWeights[0]/(vs_JointWeights[0]+vs_JointWeights[1]);
         gl_Position = mix(u_ViewProj*delta1,u_ViewProj*delta2,f);
         fs_Pos = vec3(mix(delta1, delta2, f));
-        //TODO: change normals here and
+        //modify normals
+        delta1 = u_Trans[joint1]*u_Binds[joint1]*fs_Nor;
+        delta2 = u_Trans[joint2]*u_Binds[joint2]*fs_Nor;
+        fs_Nor = mix(delta1, delta2, f);
     }
 }
