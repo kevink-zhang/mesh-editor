@@ -151,7 +151,7 @@ MyGL::MyGL(QWidget *parent)
     : OpenGLContext(parent),
       m_geomSquare(this),
       m_mesh(this),
-      m_progLambert(this), m_progFlat(this),
+      m_progLambert(this), m_progFlat(this), m_progSkeleton(this),
       m_glCamera(),
       m_vertDisplay(this),
       m_faceDisplay(this),
@@ -208,6 +208,8 @@ void MyGL::initializeGL()
     m_progLambert.create(":/glsl/lambert.vert.glsl", ":/glsl/lambert.frag.glsl");
     // Create and set up the flat lighting shader
     m_progFlat.create(":/glsl/flat.vert.glsl", ":/glsl/flat.frag.glsl");
+    // Create and set up the skeleton shader
+    m_progSkeleton.create(":/glsl/skeleton.vert.glsl", ":/glsl/skeleton.frag.glsl");
 
 
     // We have to have a VAO bound in OpenGL 3.2 Core. But if we're not
@@ -226,6 +228,7 @@ void MyGL::resizeGL(int w, int h)
 
     m_progLambert.setViewProjMatrix(viewproj);
     m_progFlat.setViewProjMatrix(viewproj);
+    m_progSkeleton.setViewProjMatrix(viewproj);
 
     printGLErrorLog();
 }
@@ -237,9 +240,18 @@ void MyGL::paintGL()
     // Clear the screen so that we only see newly drawn images
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    m_progFlat.setViewProjMatrix(m_glCamera.getViewProj());
+
     m_progLambert.setViewProjMatrix(m_glCamera.getViewProj());
     m_progLambert.setCamPos(m_glCamera.eye);
+    m_progLambert.setModelMatrix(glm::mat4(1.f));
+    m_progLambert.setViewProjMatrix(m_glCamera.getViewProj());
+
+    m_progSkeleton.setViewProjMatrix(m_glCamera.getViewProj());
+    m_progSkeleton.setCamPos(m_glCamera.eye);
+    m_progSkeleton.setModelMatrix(glm::mat4(1.f));
+    m_progSkeleton.setViewProjMatrix(m_glCamera.getViewProj());
+
+    m_progFlat.setViewProjMatrix(m_glCamera.getViewProj());
     m_progFlat.setModelMatrix(glm::mat4(1.f));
 
     //Create a model matrix. This one rotates the square by PI/4 radians then translates it by <-2,0,0>.
@@ -247,12 +259,15 @@ void MyGL::paintGL()
     //This is because OpenGL expects column-major matrices, but you've
     //implemented row-major matrices.
     //Send the geometry's transformation matrix to the shader
-    m_progLambert.setModelMatrix(glm::mat4(1.f));
+
 
     //draw the mesh
 
-    m_progLambert.draw(m_mesh);
+    m_progSkeleton.draw(m_mesh);
     glDisable(GL_DEPTH_TEST);
+    for(int i = 0; i < joints.size(); i++) {
+        m_progFlat.draw(*joints[i].get());
+    }
     m_progFlat.draw(m_faceDisplay);
     m_progFlat.draw(m_edgeDisplay);
     m_progFlat.draw(m_vertDisplay);
@@ -373,6 +388,7 @@ void MyGL::slot_loadobj() {
     emit sig_faceclick(nullptr);
     emit sig_vertclick(nullptr);
 
+
     std::vector<glm::vec4> v;
     std::vector<glm::vec2> vt;
     std::vector<glm::vec4> vn;
@@ -445,7 +461,6 @@ void MyGL::slot_loadobj() {
         }
     }
 
-
     m_mesh.create();
 
     for(int i = 0; i < m_mesh.faces.size(); i++) {
@@ -459,6 +474,94 @@ void MyGL::slot_loadobj() {
     for(int i = 0; i < m_mesh.halfedges.size(); i++) {
         emit sig_sendEdgeListNode(m_mesh.getEdge(i));
     }
+}
+
+Joint* MyGL::jsonRecursion(QJsonObject j, Joint* parent) {
+    glm::vec3 p = glm::vec3(j["pos"][0].toDouble(), j["pos"][1].toDouble(), j["pos"][2].toDouble());
+    glm::vec4 r = glm::vec4(j["rot"][0].toDouble(), j["rot"][1].toDouble(), j["rot"][2].toDouble(), j["rot"][3].toDouble());
+    joints.push_back(mkU<Joint>(this, j["name"].toString(), r, p));
+    Joint* this_joint = joints[joints.size()-1].get();
+    this_joint->parent = parent;
+    for(auto element: j["children"].toArray()) {
+        Joint* childjoint = jsonRecursion(element.toObject(), this_joint);
+        this_joint->addChild(childjoint);
+        this_joint->children.push_back(childjoint);
+    }
+    this_joint->create();
+    return this_joint;
+}
+void MyGL::slot_loadjson() {
+    QString filename = QFileDialog::getOpenFileName(0, QString("Load Scene File"), QDir::currentPath().append(QString("../..")), QString("*.json"));
+    int i = filename.length() - 1;
+    while(QString::compare(filename.at(i), QChar('/')) != 0)
+    {
+        i--;
+    }
+    QString local_path = filename.left(i+1);
+
+    QFile file(filename);
+    if(!file.open(QIODevice::ReadOnly)){
+        qWarning("Could not open the JSON file.");
+        return;
+    }
+
+    QJsonObject d = QJsonDocument::fromJson(file.readAll()).object();
+    m_jointDisplay = nullptr;
+    joints.clear();
+    emit sig_jointclick(nullptr);
+    emit sig_sendRootNode(jsonRecursion(d["root"].toObject(), nullptr));
+
+    std::vector<glm::mat4> binds;
+    for(int i = 0; i < joints.size(); i++) {
+        binds.push_back(glm::inverse(joints[i].get()->getOverallTransformation()));
+    }
+    m_progSkeleton.setBinds(binds);
+    std::vector<glm::mat4> trans;
+    for(int i = 0; i < joints.size(); i++) {
+        trans.push_back(joints[i].get()->getOverallTransformation());
+    }
+    m_progSkeleton.setTransforms(trans);
+}
+
+void MyGL::selectJoint(int id) {
+    Joint::selected = id;
+    for(int i = 0; i < joints.size(); i++){
+        joints[i].get()->create();
+        if(joints[i].get()->id == id){
+            m_jointDisplay = joints[i].get();
+        }
+    }
+    update();
+}
+
+//uses the mesh and joints of mygl
+void MyGL::slot_skinmesh() {
+    if(m_mesh.vertices.empty() || joints.empty()) return;
+    for(int i = 0; i < m_mesh.vertices.size(); i++) {
+        Vertex* vv = m_mesh.getVert(i);
+        float d1 = 1000000;
+        float d2 = 1000000;
+        int id1, id2;
+        for(int j = 0; j < joints.size(); j++) {
+            Joint* jj = joints[j].get();
+            float d = glm::length(vv->pos-glm::vec3(jj->getOverallTransformation()*glm::vec4(0,0,0,1)));
+            if(d < d1) {
+                id2 = id1;
+                d2 = d1;
+                id1 = jj->id;
+                d1 = d;
+            }
+            else if(d < d2) {
+                id2 = jj->id;
+                d2 = d;
+            }
+        }
+        vv->skinid = glm::vec2(id1, id2);
+        vv->skinwei = glm::vec2(1.f/d1, 1.f/d2);
+    }
+
+    m_mesh.create();
+    update();
 }
 
 void MyGL::slot_catmullclark() {
@@ -656,6 +759,129 @@ void MyGL::slot_setZ(double value) {
     m_mesh.create();
     m_vertDisplay.create();
     update();
+}
+
+void MyGL::slot_setJointX(double value) {
+    if(!m_jointDisplay) return;
+    m_jointDisplay->pos[0] = value;
+    m_jointDisplay->pushUpdate();
+    update();
+
+    std::vector<glm::mat4> transf;
+    for(int i = 0; i < joints.size(); i++) {
+        transf.push_back(joints[i].get()->getOverallTransformation());
+    }
+    m_progSkeleton.setTransforms(transf);
+}
+
+void MyGL::slot_setJointY(double value) {
+    if(!m_jointDisplay) return;
+    m_jointDisplay->pos[1] = value;
+    m_jointDisplay->pushUpdate();
+    update();
+
+    std::vector<glm::mat4> transf;
+    for(int i = 0; i < joints.size(); i++) {
+        transf.push_back(joints[i].get()->getOverallTransformation());
+    }
+    m_progSkeleton.setTransforms(transf);
+}
+
+void MyGL::slot_setJointZ(double value) {
+    if(!m_jointDisplay) return;
+    m_jointDisplay->pos[2] = value;
+    m_jointDisplay->pushUpdate();
+    update();
+
+    std::vector<glm::mat4> transf;
+    for(int i = 0; i < joints.size(); i++) {
+        transf.push_back(joints[i].get()->getOverallTransformation());
+    }
+    m_progSkeleton.setTransforms(transf);
+}
+
+void MyGL::slot_rotateJointX(){
+    if(!m_jointDisplay) return;
+    m_jointDisplay->angle = glm::rotate(m_jointDisplay->angle, glm::radians(15.f), glm::vec3(1, 0, 0));
+    m_jointDisplay->pushUpdate();
+    update();
+    sig_jointclick(m_jointDisplay);
+
+    std::vector<glm::mat4> transf;
+    for(int i = 0; i < joints.size(); i++) {
+        transf.push_back(joints[i].get()->getOverallTransformation());
+    }
+    m_progSkeleton.setTransforms(transf);
+}
+
+void MyGL::slot_rotateJointY(){
+    if(!m_jointDisplay) return;
+    m_jointDisplay->angle = glm::rotate(m_jointDisplay->angle, glm::radians(15.f), glm::vec3(0, 1, 0));
+    m_jointDisplay->pushUpdate();
+    update();
+    sig_jointclick(m_jointDisplay);
+
+    std::vector<glm::mat4> transf;
+    for(int i = 0; i < joints.size(); i++) {
+        transf.push_back(joints[i].get()->getOverallTransformation());
+    }
+    m_progSkeleton.setTransforms(transf);
+}
+
+void MyGL::slot_rotateJointZ(){
+    if(!m_jointDisplay) return;
+    m_jointDisplay->angle = glm::rotate(m_jointDisplay->angle, glm::radians(15.f), glm::vec3(0, 0, 1));
+    m_jointDisplay->pushUpdate();
+    update();
+    sig_jointclick(m_jointDisplay);
+
+    std::vector<glm::mat4> transf;
+    for(int i = 0; i < joints.size(); i++) {
+        transf.push_back(joints[i].get()->getOverallTransformation());
+    }
+    m_progSkeleton.setTransforms(transf);
+}
+
+void MyGL::slot_rotateJointNX(){
+    if(!m_jointDisplay) return;
+    m_jointDisplay->angle = glm::rotate(m_jointDisplay->angle, glm::radians(-15.f), glm::vec3(1, 0, 0));
+    m_jointDisplay->pushUpdate();
+    update();
+    sig_jointclick(m_jointDisplay);
+
+    std::vector<glm::mat4> transf;
+    for(int i = 0; i < joints.size(); i++) {
+        transf.push_back(joints[i].get()->getOverallTransformation());
+    }
+    m_progSkeleton.setTransforms(transf);
+}
+
+void MyGL::slot_rotateJointNY(){
+    if(!m_jointDisplay) return;
+    m_jointDisplay->angle = glm::rotate(m_jointDisplay->angle, glm::radians(-15.f), glm::vec3(0, 1, 0));
+    m_jointDisplay->pushUpdate();
+    update();
+    sig_jointclick(m_jointDisplay);
+
+    std::vector<glm::mat4> transf;
+    for(int i = 0; i < joints.size(); i++) {
+        transf.push_back(joints[i].get()->getOverallTransformation());
+    }
+    m_progSkeleton.setTransforms(transf);
+}
+
+void MyGL::slot_rotateJointNZ(){
+    if(!m_jointDisplay) return;
+    m_jointDisplay->angle = glm::rotate(m_jointDisplay->angle, glm::radians(-15.f), glm::vec3(0, 0, 1));
+    m_jointDisplay->pushUpdate();
+    update();
+    sig_jointclick(m_jointDisplay);
+
+    std::vector<glm::mat4> transf;
+    for(int i = 0; i < joints.size(); i++) {
+        transf.push_back(joints[i].get()->getOverallTransformation());
+    }
+    m_progSkeleton.setTransforms(transf);
 }
 
 void MyGL::slot_setSharpness(double value) {

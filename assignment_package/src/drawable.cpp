@@ -2,8 +2,8 @@
 #include <la.h>
 
 Drawable::Drawable(OpenGLContext* context)
-    : count(-1), bufIdx(), bufPos(), bufNor(), bufCol(),
-      idxBound(false), posBound(false), norBound(false), colBound(false),
+    : count(-1), bufIdx(), bufPos(), bufNor(), bufCol(), bufJoints(), bufJointWeights(),
+      idxBound(false), posBound(false), norBound(false), colBound(false), jointsBound(false), jointWeightsBound(false),
       mp_context(context)
 {}
 
@@ -18,6 +18,8 @@ void Drawable::destroy()
     mp_context->glDeleteBuffers(1, &bufPos);
     mp_context->glDeleteBuffers(1, &bufNor);
     mp_context->glDeleteBuffers(1, &bufCol);
+    mp_context->glDeleteBuffers(1, &bufJoints);
+    mp_context->glDeleteBuffers(1, &bufJointWeights);
 }
 
 GLenum Drawable::drawMode()
@@ -71,6 +73,18 @@ void Drawable::generateUV()
     mp_context->glGenBuffers(1, &bufUV);
 }
 
+void Drawable::generateJoints(){
+    jointsBound = true;
+    // Create a VBO on our GPU and store its handle in bufJoints
+    mp_context->glGenBuffers(1, &bufJoints);
+}
+
+void Drawable::generateJointWeights(){
+    jointWeightsBound = true;
+    // Create a VBO on our GPU and store its handle in bufJointWeights
+    mp_context->glGenBuffers(1, &bufJointWeights);
+}
+
 bool Drawable::bindIdx()
 {
     if(idxBound) {
@@ -109,4 +123,20 @@ bool Drawable::bindUV()
         mp_context->glBindBuffer(GL_ARRAY_BUFFER, bufUV);
     }
     return uvBound;
+}
+
+bool Drawable::bindJoints()
+{
+    if(jointsBound){
+        mp_context->glBindBuffer(GL_ARRAY_BUFFER, bufJoints);
+    }
+    return jointsBound;
+}
+
+bool Drawable::bindJointWeights()
+{
+    if(jointWeightsBound){
+        mp_context->glBindBuffer(GL_ARRAY_BUFFER, bufJointWeights);
+    }
+    return jointWeightsBound;
 }

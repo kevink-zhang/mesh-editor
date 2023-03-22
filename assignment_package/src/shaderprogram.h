@@ -19,10 +19,15 @@ public:
     int attrNor; // A handle for the "in" vec4 representing vertex normal in the vertex shader
     int attrCol; // A handle for the "in" vec4 representing vertex color in the vertex shader
 
+    int attrJoints;
+    int attrJointWeights;
+
     int unifModel; // A handle for the "uniform" mat4 representing model matrix in the vertex shader
     int unifModelInvTr; // A handle for the "uniform" mat4 representing inverse transpose of the model matrix in the vertex shader
     int unifViewProj; // A handle for the "uniform" mat4 representing combined projection and view matrices in the vertex shader
     int unifCamPos; // A handle for the "uniform" vec4 representing color of geometry in the vertex shader
+    int unifBinds;
+    int unifTrans;
 
 public:
     ShaderProgram(OpenGLContext* context);
@@ -36,6 +41,9 @@ public:
     void setViewProjMatrix(const glm::mat4 &vp);
     // Pass the given color to this shader on the GPU
     void setCamPos(glm::vec3 pos);
+
+    void setBinds(std::vector<glm::mat4>);
+    void setTransforms(std::vector<glm::mat4>);
     // Draw the given object to our screen using this ShaderProgram's shaders
     void draw(Drawable &d);
     // Utility function used in create()

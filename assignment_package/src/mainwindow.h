@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include "scene/mesh.h"
 #include <QGraphicsScene>
+#include <QTreeWidget>
 
 namespace Ui {
 class MainWindow;
@@ -29,11 +30,15 @@ private slots:
 
     void slot_addEdgeToListWidget(QListWidgetItem *i);
 
+    void slot_addRootToTreeWidget(QTreeWidgetItem *i);
+
     void slot_onFaceItemClicked(QListWidgetItem* item);
 
     void slot_onVertexItemClicked(QListWidgetItem* item);
 
     void slot_onEdgeItemClicked(QListWidgetItem* item);
+
+    void slot_onJointItemClicked(QTreeWidgetItem* item);
 
     void slot_toggleEdgeSharp(int value);
     void slot_toggleFaceSharp(int value);

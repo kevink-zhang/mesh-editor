@@ -31,15 +31,45 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->sharpnessSpinBox, SIGNAL(valueChanged(double)),
             ui->mygl, SLOT(slot_setSharpness(double)));
 
+    connect(ui->jointXSpinBox, SIGNAL(valueChanged(double)),
+            ui->mygl, SLOT(slot_setJointX(double)));
+
+    connect(ui->jointYSpinBox, SIGNAL(valueChanged(double)),
+            ui->mygl, SLOT(slot_setJointY(double)));
+
+    connect(ui->jointZSpinBox, SIGNAL(valueChanged(double)),
+            ui->mygl, SLOT(slot_setJointZ(double)));
+
     //checkboxes
     connect(ui->edgeSharpCheckBox, SIGNAL(stateChanged(int)), this, SLOT(slot_toggleEdgeSharp(int)));
     connect(ui->vertSharpCheckBox, SIGNAL(stateChanged(int)), this, SLOT(slot_toggleVertSharp(int)));
     connect(ui->faceSharpCheckBox, SIGNAL(stateChanged(int)), this, SLOT(slot_toggleFaceSharp(int)));
 
+    //connect the joint rotation buttons
+    connect(ui->jointNXButton, SIGNAL(clicked()),
+            ui->mygl, SLOT(slot_rotateJointNX()));
+    connect(ui->jointXButton, SIGNAL(clicked()),
+            ui->mygl, SLOT(slot_rotateJointX()));
+    connect(ui->jointNYButton, SIGNAL(clicked()),
+            ui->mygl, SLOT(slot_rotateJointNY()));
+    connect(ui->jointYButton, SIGNAL(clicked()),
+            ui->mygl, SLOT(slot_rotateJointY()));
+    connect(ui->jointNZButton, SIGNAL(clicked()),
+            ui->mygl, SLOT(slot_rotateJointNZ()));
+    connect(ui->jointZButton, SIGNAL(clicked()),
+            ui->mygl, SLOT(slot_rotateJointZ()));
 
     //connect the load obj to button
     connect(ui->loadOBJButton, SIGNAL(clicked()),
             ui->mygl, SLOT(slot_loadobj()));
+
+    //connect the load json to button
+    connect(ui->loadJSONButton, SIGNAL(clicked()),
+            ui->mygl, SLOT(slot_loadjson()));
+
+    //connect the skinning button
+    connect(ui->skinningButton, SIGNAL(clicked()),
+            ui->mygl, SLOT(slot_skinmesh()));
 
     //connect catmull clark button
     connect(ui->ccButton, SIGNAL(clicked()),
@@ -77,18 +107,30 @@ MainWindow::MainWindow(QWidget *parent) :
             // Slot name
             SLOT(slot_addEdgeToListWidget(QListWidgetItem*)));
 
+    connect(ui->mygl,
+            // Signal name
+            SIGNAL(sig_sendRootNode(QTreeWidgetItem*)),
+            // Widget with the slot that receives the signal
+            this,
+            // Slot name
+            SLOT(slot_addRootToTreeWidget(QTreeWidgetItem*)));
+
     connect(ui->facesListWidget, SIGNAL(itemClicked(QListWidgetItem*)),
                 this, SLOT(slot_onFaceItemClicked(QListWidgetItem*)));
     connect(ui->vertsListWidget, SIGNAL(itemClicked(QListWidgetItem*)),
                 this, SLOT(slot_onVertexItemClicked(QListWidgetItem*)));
     connect(ui->halfEdgesListWidget, SIGNAL(itemClicked(QListWidgetItem*)),
                 this, SLOT(slot_onEdgeItemClicked(QListWidgetItem*)));
+    connect(ui->jointsTreeWidget, SIGNAL(itemClicked(QTreeWidgetItem*, int)),
+                this, SLOT(slot_onJointItemClicked(QTreeWidgetItem*)));
     connect(ui->mygl, SIGNAL(sig_faceclick(QListWidgetItem*)),
                 this, SLOT(slot_onFaceItemClicked(QListWidgetItem*)));
     connect(ui->mygl, SIGNAL(sig_vertclick(QListWidgetItem*)),
                 this, SLOT(slot_onVertexItemClicked(QListWidgetItem*)));
     connect(ui->mygl, SIGNAL(sig_edgeclick(QListWidgetItem*)),
                 this, SLOT(slot_onEdgeItemClicked(QListWidgetItem*)));
+    connect(ui->mygl, SIGNAL(sig_jointclick(QTreeWidgetItem*)),
+                this, SLOT(slot_onJointItemClicked(QTreeWidgetItem*)));
 }
 
 MainWindow::~MainWindow()
@@ -117,6 +159,9 @@ void MainWindow::slot_addVertexToListWidget(QListWidgetItem *i) {
 
 void MainWindow::slot_addEdgeToListWidget(QListWidgetItem *i) {
     ui->halfEdgesListWidget->addItem(i);
+}
+void MainWindow::slot_addRootToTreeWidget(QTreeWidgetItem *i) {
+    ui->jointsTreeWidget->addTopLevelItem(i);
 }
 //use nullptr as a special case for reset
 void MainWindow::slot_onFaceItemClicked(QListWidgetItem* item)
@@ -168,6 +213,21 @@ void MainWindow::slot_onEdgeItemClicked(QListWidgetItem* item)
     ui->edgeSharpCheckBox->setChecked(ui->mygl->m_edgeDisplay.representedEdge->sharp);
     ui->mygl->m_edgeDisplay.create();
     ui->mygl->update();
+}
+
+void MainWindow::slot_onJointItemClicked(QTreeWidgetItem* item) {
+    if(!item) {
+        ui->jointXSpinBox->setValue(0);
+        ui->jointYSpinBox->setValue(0);
+        ui->jointZSpinBox->setValue(0);
+        ui->jointQuatDisplay->setText("Unselected");
+        return;
+    }
+    ui->mygl->selectJoint(((Joint*)item)->id);
+    ui->jointXSpinBox->setValue(((Joint*) item)->pos.x);
+    ui->jointYSpinBox->setValue(((Joint*) item)->pos.y);
+    ui->jointZSpinBox->setValue(((Joint*) item)->pos.z);
+    ui->jointQuatDisplay->setText(QString("[%1,%2,%3,%4]").arg(((Joint*) item)->angle.w, 0, 'f', 3).arg(((Joint*) item)->angle.x, 0, 'f', 3).arg(((Joint*) item)->angle.y, 0, 'f', 3).arg(((Joint*) item)->angle.z, 0, 'f', 3));
 }
 
 void MainWindow::slot_toggleEdgeSharp(int value) {

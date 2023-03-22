@@ -14,7 +14,7 @@ Face::Face() : color(glm::vec3((rand() % 100)/100.0, (rand() % 100)/100.0, (rand
     setText(QString("Face %1").arg(id+1));
 }
 int Vertex::index = 0;
-Vertex::Vertex(glm::vec3 p) : pos(p), sharp(false), id(index++){
+Vertex::Vertex(glm::vec3 p) : pos(p), sharp(false), id(index++), skinid(glm::ivec2(-1,-1)), skinwei(glm::vec2(-1, -1)){
     setText(QString("Vertex %1").arg(id+1));
 }
 int HalfEdge::index = 0;
@@ -70,6 +70,10 @@ void Mesh::create() {
 
     std::vector<GLuint> idx;
 
+    std::vector<glm::vec2> joints;
+
+    std::vector<glm::vec2> jointweights;
+
 
     //index for indices
     int min_idx = 0;
@@ -85,6 +89,10 @@ void Mesh::create() {
             pos.push_back(glm::vec4(p2, 1));
             nor.push_back(glm::vec4(glm::cross((p2-p1), (p3-p2)), 1));
             col.push_back(glm::vec4(face->color, 1));
+            //joints
+            joints.push_back(edgeAt->next->node->skinid);
+            jointweights.push_back(edgeAt->next->node->skinwei);
+
             edgeAt = edgeAt -> next;
         } while(edgeAt != begin);
 
@@ -113,6 +121,14 @@ void Mesh::create() {
     generateCol();
     mp_context->glBindBuffer(GL_ARRAY_BUFFER, bufCol);
     mp_context->glBufferData(GL_ARRAY_BUFFER, col.size() * sizeof(glm::vec4), col.data(), GL_STATIC_DRAW);
+
+    generateJoints();
+    mp_context->glBindBuffer(GL_ARRAY_BUFFER, bufJoints);
+    mp_context->glBufferData(GL_ARRAY_BUFFER, joints.size() * sizeof(glm::ivec2), joints.data(), GL_STATIC_DRAW);
+
+    generateJointWeights();
+    mp_context->glBindBuffer(GL_ARRAY_BUFFER, bufJointWeights);
+    mp_context->glBufferData(GL_ARRAY_BUFFER, jointweights.size() * sizeof(glm::vec2), jointweights.data(), GL_STATIC_DRAW);
 }
 
 //catmull-clark

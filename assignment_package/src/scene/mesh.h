@@ -30,6 +30,9 @@ public:
     bool sharp;
     int id;
 
+    glm::vec2 skinid;
+    glm::vec2 skinwei;
+
     Vertex(glm::vec3 p);
 };
 
